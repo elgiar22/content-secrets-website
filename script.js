@@ -34,23 +34,68 @@
     if (siteHeader) siteHeader.classList.toggle('scrolled', scrollTop > 20);
   }, { passive: true });
 
+  // --- Reliable Cross-Device Clipboard Copy Helper ---
+  function copyTextReliably(text, successMsg) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(successMsg);
+      }).catch(() => {
+        fallbackCopy(text, successMsg);
+      });
+    } else {
+      fallbackCopy(text, successMsg);
+    }
+  }
+
+  function fallbackCopy(text, successMsg) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+      showToast(successMsg);
+    } catch {
+      showToast('انسخ النص يدوياً');
+    }
+    document.body.removeChild(ta);
+  }
+
   // --- Mobile Navigation Drawer ---
   const menuToggle = document.getElementById('menuToggle');
   const mobileNav = document.getElementById('mobileNav');
 
+  function closeMobileNav() {
+    if (!menuToggle || !mobileNav) return;
+    mobileNav.classList.remove('open');
+    menuToggle.setAttribute('aria-expanded', 'false');
+    mobileNav.setAttribute('aria-hidden', 'true');
+  }
+
   if (menuToggle && mobileNav) {
-    menuToggle.addEventListener('click', () => {
+    menuToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
       const isOpen = mobileNav.classList.toggle('open');
       menuToggle.setAttribute('aria-expanded', String(isOpen));
       mobileNav.setAttribute('aria-hidden', String(!isOpen));
     });
 
     mobileNav.querySelectorAll('a').forEach((link) => {
-      link.addEventListener('click', () => {
-        mobileNav.classList.remove('open');
-        menuToggle.setAttribute('aria-expanded', 'false');
-        mobileNav.setAttribute('aria-hidden', 'true');
-      });
+      link.addEventListener('click', closeMobileNav);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (mobileNav.classList.contains('open') && !mobileNav.contains(e.target) && !menuToggle.contains(e.target)) {
+        closeMobileNav();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeMobileNav();
     });
   }
 
@@ -222,15 +267,7 @@
       item.appendChild(badge);
 
       const copyAction = () => {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(() => {
-            showToast('تم نسخ الخطاف بنجاح ✓');
-          }).catch(() => {
-            showToast('تم تحديد الخطاف للنسخ');
-          });
-        } else {
-          showToast('تم تجهيز الخطاف ✓');
-        }
+        copyTextReliably(text, 'تم نسخ الخطاف بنجاح ✓');
       };
 
       item.addEventListener('click', copyAction);
@@ -313,17 +350,11 @@
   const copyPhoneBtn = document.getElementById('copyPhoneBtn');
   if (copyPhoneBtn) {
     copyPhoneBtn.addEventListener('click', () => {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(DISPLAY_PHONE).then(() => {
-          showToast(`تم نسخ الرقم ${DISPLAY_PHONE} ✓`);
-        });
-      } else {
-        showToast(`رقم التواصل: ${DISPLAY_PHONE}`);
-      }
+      copyTextReliably(DISPLAY_PHONE, `تم نسخ الرقم ${DISPLAY_PHONE} ✓`);
     });
   }
 
-  // --- WhatsApp Order Form ---
+  // --- WhatsApp Order Form (Mobile-safe deep linking) ---
   const whatsappOrderForm = document.getElementById('whatsappOrderForm');
   if (whatsappOrderForm) {
     whatsappOrderForm.addEventListener('submit', (e) => {
@@ -339,7 +370,12 @@
       if (goal) lines.push(`هدفي من الكتاب: ${goal}`);
 
       const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(lines.join('\n'))}`;
-      window.open(url, '_blank', 'noopener,noreferrer');
+      const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      if (isMobile) {
+        window.location.href = url;
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
     });
   }
 })();
